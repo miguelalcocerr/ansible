@@ -1,0 +1,80 @@
+---
+- name: Validación de Pre-requisitos para Actualización RHEL 8.1
+  hosts: servers
+  gather_facts: true
+  become: yes
+  vars:
+    report_file: "/tmp/validacion_rhel_{{ ansible_hostname }}.txt"
+    espacio_minimo_gb: 5  #  5GB
+
+  tasks:
+    # 1. Verificación del sistema operativo
+    - name: Confirmar sistema RHEL 8.1
+      assert:
+        that:
+          - ansible_distribution == "RedHat"
+          - ansible_distribution_version.startswith('8.1')
+        msg: "Este playbook solo funciona en RHEL 8.1"
+
+    # 2. Verificación de espacio en disco (ahora con 5GB mínimo)
+    - name: Obtener espacio disponible en GB
+      shell: |
+        df -BG / --output=avail | tail -1 | tr -d 'G'
+      register: espacio_disponible
+      changed_when: false
+
+    # 3. Verificación de repositorios
+    - name: Listar repositorios habilitados
+      command: dnf repolist all --enabled
+      register: repo_list
+      changed_when: false
+
+    # 4. Verificación de paquetes esenciales
+    - name: Validar paquetes requeridos
+      package:
+        name:
+          - dnf-utils
+          - yum-utils
+        state: present
+      register: pkg_validation
+
+    # 5. Generar y guardar reporte
+    - name: Generar reporte de validación
+      copy:
+        content: |
+          ===== REPORTE DE VALIDACIÓN RHEL 8.1 =====
+          Generado: {{ ansible_date_time.iso8601 }}
+          Host: {{ ansible_hostname }} ({{ ansible_default_ipv4.address }})
+          
+          [REQUISITOS DEL SISTEMA]
+          * Versión OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          * Espacio disponible: {{ espacio_disponible.stdout }}GB (Mínimo requerido: {{ espacio_minimo_gb }}GB)
+          * Estado: {{ 'OK' if espacio_disponible.stdout|int >= espacio_minimo_gb|int else 'INSUFICIENTE' }}
+
+          [REPOSITORIOS HABILITADOS]
+          {% for line in repo_list.stdout_lines if not line.startswith(('repo', ' ')) and line|trim != '' %}
+          * {{ line }}
+          {% endfor %}
+
+          [PAQUETES REQUERIDOS]
+          * dnf-utils: {{ 'INSTALADO' if not pkg_validation.changed or 'dnf-utils' in pkg_validation.changed else 'FALTANTE' }}
+          * yum-utils: {{ 'INSTALADO' if not pkg_validation.changed or 'yum-utils' in pkg_validation.changed else 'FALTANTE' }}
+
+          [RESULTADO FINAL]
+          {{ '✅ SISTEMA PREPARADO PARA ACTUALIZACIÓN' if 
+             (espacio_disponible.stdout|int >= espacio_minimo_gb|int and 
+              repo_list.stdout != '' and 
+              not pkg_validation.changed) 
+             else '❌ REQUIERE ATENCIÓN' }}
+
+          [RECOMENDACIONES]
+          1. Ejecutar actualización con:
+             ansible-playbook actualizar_rhel.yml -e "confirm_update=true"
+          2. Ventana de mantenimiento recomendada: 02:00-04:00
+        dest: "{{ report_file }}"
+        mode: '0644'
+
+    # 6. Mostrar ubicación del reporte
+    - name: Mostrar ubicación del reporte
+      debug:
+        msg: "Reporte guardado en {{ report_file }}"
