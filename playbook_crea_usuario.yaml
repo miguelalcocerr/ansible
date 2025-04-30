@@ -6,7 +6,7 @@
   
   # Sección de variables definidas para el playbook
   vars:
-    usuario: "usransible"                      # Variable con el nombre de usuario a crear
+    usuario: "usraap"                      # Variable con el nombre de usuario a crear
     password: "12345678"                       # Variable con la contraseña del usuario (en producción usar vault)
 
   # Lista de tareas que ejecutará el playbook
