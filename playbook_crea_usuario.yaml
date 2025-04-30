@@ -1,6 +1,6 @@
 ---
 # Inicio del documento YAML - Todos los playbooks de Ansible comienzan con este símbolo
-- name: Crear usuario usransible con contraseña  # Nombre descriptivo del playbook
+- name: Crear usuario usraap con contraseña  # Nombre descriptivo del playbook
   hosts: all                                   # Se ejecutará en todos los hosts del inventario seleccionado
   become: yes                                  # Permite escalar privilegios (ejecutar como root/sudo)
   
