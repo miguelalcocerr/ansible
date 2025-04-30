@@ -1,6 +1,6 @@
 ---
 - name: Validación de Pre-requisitos para Actualización RHEL 8.1
-  hosts: servers
+  hosts: inventory-rhel8
   gather_facts: true
   become: yes
   vars:
