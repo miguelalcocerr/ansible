@@ -1,0 +1,27 @@
+---
+# Inicio del documento YAML - Todos los playbooks de Ansible comienzan con este símbolo
+- name: Crear usuario usransible con contraseña  # Nombre descriptivo del playbook
+  hosts: all                                   # Se ejecutará en todos los hosts del inventario seleccionado
+  become: yes                                  # Permite escalar privilegios (ejecutar como root/sudo)
+  
+  # Sección de variables definidas para el playbook
+  vars:
+    usuario: "usransible"                      # Variable con el nombre de usuario a crear
+    password: "12345678"                       # Variable con la contraseña del usuario (en producción usar vault)
+
+  # Lista de tareas que ejecutará el playbook
+  tasks:
+    - name: Crear usuario usransible            # Nombre descriptivo de la tarea
+      ansible.builtin.user:                     # Módulo user de Ansible para gestión de usuarios
+        name: "{{ usuario }}"                  # Nombre del usuario a crear (usa variable)
+        password: "{{ password | password_hash('sha512') }}"  # Contraseña encriptada con SHA-512
+        shell: /bin/bash                        # Shell asignado al usuario
+        create_home: yes                        # Crear directorio home automáticamente
+        home: /home/{{ usuario }}               # Ruta del directorio home del usuario
+        state: present                          # Asegura que el usuario exista (crea si no existe)
+      register: user_created                    # Guarda el resultado de esta tarea en una variable
+
+    - name: Mostrar mensaje de confirmación     # Tarea para mostrar feedback
+      ansible.builtin.debug:                    # Módulo debug para mostrar mensajes
+        msg: "Usuario {{ usuario }} creado exitosamente"  # Mensaje de confirmación
+      when: user_created.changed                # Solo se ejecuta si hubo cambios (usuario creado)
