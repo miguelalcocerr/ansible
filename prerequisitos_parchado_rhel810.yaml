@@ -1,9 +1,8 @@
 ---
-- name: Validar pre-requisitos de actualización a RHEL 8.10 y guardar output
+- name: Validar pre-requisitos de actualización a RHEL 8.x y guardar output
   hosts: all
   become: true
   vars:
-    desired_rhel_version: "8.10"
     output_dir: "/tmp"
     output_filename: "ansible_output_{{ ansible_date_time.year }}_{{ ansible_date_time.month }}_{{ ansible_date_time.day }}_{{ ansible_date_time.hour }}_{{ ansible_date_time.minute }}_{{ ansible_date_time.second }}.txt"
 
@@ -16,30 +15,19 @@
       command: cat /etc/redhat-release
       register: rhel_version
       failed_when: rhel_version.stdout is not search("Red Hat Enterprise Linux release 8")
-      tags: check_version
 
     - name: Mostrar versión actual de RHEL
       debug:
         msg: "Versión actual de RHEL: {{ rhel_version.stdout }}"
-      tags: show_version
 
     - name: Verificar suscripción de RHEL
       command: subscription-manager status
       register: subscription_status
       failed_when: subscription_status.rc != 0
-      tags: check_subscription
 
     - name: Mostrar estado de suscripción
       debug:
         msg: "Estado de suscripción: {{ subscription_status.stdout }}"
-      tags: show_subscription
-
-    - name: Verificar si la versión de RHEL es la deseada
-      assert:
-        that:
-          - rhel_version.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")
-        msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"
-      tags: assert_version
 
     - name: Guardar output del playbook en el filesystem local
       ansible.builtin.lineinfile:
@@ -51,4 +39,3 @@
         - "Estado de suscripción: {{ subscription_status.stdout }}"
       delegate_to: localhost
       run_once: true
-      tags: save_output
