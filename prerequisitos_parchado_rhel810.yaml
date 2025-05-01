@@ -1,43 +1,60 @@
 ---
-- name: Validar pre-requisitos para actualización a RHEL 8.10
-  hosts: all
-  become: yes
-  vars:
-    target_release: "8.10"  # Versión objetivo de RHEL
+- name: Validar pre-requisitos de actualización a RHEL 8.10  # Nombre del playbook
+  hosts: all  # Se ejecuta en todos los hosts definidos en el inventario
+  become: true  # Utiliza privilegios de superusuario para ejecutar comandos
+  vars:
+    desired_rhel_version: "8.10"  # Versión deseada de RHEL
 
-  tasks:
-    # Tarea 1: Verificar suscripción al sistema
-    - name: Validar estado de suscripción a Red Hat
-      ansible.builtin.command: subscription-manager status
-      register: subscription_status
-      ignore_errors: yes  # Continuar incluso si falla para capturar el error
-      changed_when: false  # Siempre es una tarea de verificación (no cambia estado)
+  tasks:
+    - name: Verificar versión actual de RHEL  # Verifica la versión actual de RHEL
+      command: cat /etc/redhat-release  # Lee el archivo que contiene la versión de RHEL
+      register: rhel_version  # Almacena el resultado en la variable rhel_version
+      failed_when: rhel_version.stdout is not search("Red Hat Enterprise Linux release 8")  # Falla si no es RHEL 8
 
-    # Tarea 2: Verificar actualizaciones disponibles para el release objetivo
-    - name: Verificar actualizaciones disponibles para RHEL {{ target_release }}
-      ansible.builtin.command: |
-        yum check-update --releasever={{ target_release }}
-      register: yum_check_update
-      ignore_errors: yes  # yum devuelve 100 cuando hay actualizaciones
-      changed_when: false
-      when: subscription_status.rc == 0  # Solo ejecutar si el sistema está suscrito
+    - name: Mostrar versión actual de RHEL  # Muestra la versión actual de RHEL
+      debug:
+        msg: "Versión actual de RHEL: {{ rhel_version.stdout }}"  # Muestra el mensaje con la versión actual
 
-    # Tarea 3: Mostrar resumen de validación
-    - name: Mostrar resultados de validación
-      ansible.builtin.debug:
-        msg: |
-          RESULTADOS DE VALIDACIÓN:
-          - Estado suscripción: {{ 'ACTIVA' if subscription_status.rc == 0 else 'INACTIVA o ERROR' }}
-          {% if subscription_status.rc == 0 %}
-          - Actualizaciones pendientes: {{ (yum_check_update.stdout_lines|length - 1)|default(0) }}
-          - Detalles actualizaciones disponibles: {{ yum_check_update.stdout_lines[1:]|join('\n  ') }}
-          {% endif %}
-      failed_when: subscription_status.rc != 0  # Fallar si no hay suscripción activa
+    - name: Verificar suscripción de RHEL  # Verifica si el sistema está suscrito a Red Hat
+      command: subscription-manager status  # Ejecuta el comando para verificar el estado de suscripción
+      register: subscription_status  # Almacena el resultado en la variable subscription_status
+      failed_when: subscription_status.rc != 0  # Falla si el comando no se ejecuta correctamente
 
-    # Tarea 4: Verificar espacio en disco disponible
-    - name: Verificar espacio en disco en / y /boot
-      ansible.builtin.shell: |
-        df -h / /boot | awk 'NR>1 {print $4 " libres en " $6}'
-      register: disk_space
-      changed_when: false
-      ignore_errors: yes
+    - name: Mostrar estado de suscripción  # Muestra el estado de suscripción
+      debug:
+        msg: "Estado de suscripción: {{ subscription_status.stdout }}"  # Muestra el mensaje con el estado de suscripción
+
+    - name: Verificar parches pendientes  # Verifica si hay parches de seguridad pendientes
+      command: yum check-update --security  # Ejecuta el comando para verificar parches de seguridad
+      register: pending_patches  # Almacena el resultado en la variable pending_patches
+      failed_when: pending_patches.rc != 0  # Falla si el comando no se ejecuta correctamente
+
+    - name: Mostrar parches pendientes  # Muestra los parches pendientes
+      debug:
+        msg: "Parches pendientes: {{ pending_patches.stdout }}"  # Muestra el mensaje con los parches pendientes
+
+    - name: Verificar si el sistema está actualizado  # Verifica si el sistema está completamente actualizado
+      command: yum check-update  # Ejecuta el comando para verificar actualizaciones pendientes
+      register: update_status  # Almacena el resultado en la variable update_status
+      failed_when: update_status.stdout != ""  # Falla si hay actualizaciones pendientes
+
+    - name: Mostrar estado de actualización  # Muestra el estado de actualización del sistema
+      debug:
+        msg: "Estado de actualización: {{ update_status.stdout }}"  # Muestra el mensaje con el estado de actualización
+
+    - name: Verificar versión de RHEL después de actualización  # Verifica la versión de RHEL después de la actualización
+      command: cat /etc/redhat-release  # Lee el archivo que contiene la versión de RHEL
+      register: rhel_version_after  # Almacena el resultado en la variable rhel_version_after
+      when: update_status.stdout == ""  # Solo ejecuta si no hay actualizaciones pendientes
+
+    - name: Mostrar versión de RHEL después de actualización  # Muestra la versión de RHEL después de la actualización
+      debug:
+        msg: "Versión de RHEL después de actualización: {{ rhel_version_after.stdout }}"  # Muestra el mensaje con la versión actualizada
+      when: update_status.stdout == ""  # Solo ejecuta si no hay actualizaciones pendientes
+
+    - name: Verificar si la versión de RHEL es la deseada  # Verifica si la versión actualizada es la deseada
+      assert:
+        that:
+          - rhel_version_after.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")  # Verifica la versión deseada
+        msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"  # Mensaje de error si no es la versión deseada
+      when: update_status.stdout == ""  # Solo ejecuta si no hay actualizaciones pendientes
