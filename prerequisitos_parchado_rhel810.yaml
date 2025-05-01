@@ -1,5 +1,5 @@
 ---
-- name: Validar pre-requisitos de actualización a RHEL 8.x y guardar output
+- name: Validar pre-requisitos de actualización a RHEL 8.x y reportar paquetes faltantes
   hosts: all
   become: true
   vars:
@@ -29,13 +29,21 @@
       debug:
         msg: "Estado de suscripción: {{ subscription_status.stdout }}"
 
-    - name: Guardar output del playbook en el filesystem local
+    - name: Obtener lista de paquetes disponibles para instalación
+      command: dnf list available --quiet
+      register: available_packages
+      changed_when: false
+
+    - name: Mostrar lista de paquetes disponibles para instalación
+      debug:
+        msg: "{{ available_packages.stdout_lines }}"
+      when: available_packages.stdout_lines | length > 0
+
+    - name: Guardar output del playbook en el filesystem del servidor remoto
       ansible.builtin.lineinfile:
         path: "{{ output_dir }}/{{ output_filename }}"
-        line: "{{ item }}"
         create: yes
       with_items:
         - "Versión actual de RHEL: {{ rhel_version.stdout }}"
         - "Estado de suscripción: {{ subscription_status.stdout }}"
-      delegate_to: localhost
-      run_once: true
+        - "Paquetes disponibles para instalación: {{ available_packages.stdout_lines | join(', ') }}"
