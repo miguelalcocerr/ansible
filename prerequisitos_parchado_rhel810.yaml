@@ -31,7 +31,7 @@
       tags: show_subscription
 
     - name: Verificar parches pendientes
-      command: yum check-update --security
+      command: dnf check-update --security
       register: pending_patches
       failed_when: pending_patches.rc != 0
       tags: check_patches
@@ -42,9 +42,9 @@
       tags: show_patches
 
     - name: Verificar si el sistema está actualizado
-      command: yum check-update
+      command: dnf check-update
       register: update_status
-      failed_when: update_status.stdout != ""
+      failed_when: update_status.rc != 0
       tags: check_update
 
     - name: Mostrar estado de actualización
@@ -52,42 +52,23 @@
         msg: "Estado de actualización: {{ update_status.stdout }}"
       tags: show_update
 
-    - name: Verificar versión de RHEL después de actualización
-      command: cat /etc/redhat-release
-      register: rhel_version_after
-      when: update_status.stdout == ""
-      tags: check_version_after
-
-    - name: Mostrar versión de RHEL después de actualización
-      debug:
-        msg: "Versión de RHEL después de actualización: {{ rhel_version_after.stdout }}"
-      when: update_status.stdout == ""
-      tags: show_version_after
+    - name: Guardar output del playbook en el filesystem local
+      ansible.builtin.lineinfile:
+        path: "{{ output_dir }}/{{ output_filename }}"
+        line: "{{ item }}"
+        create: yes
+      with_items:
+        - "Versión actual de RHEL: {{ rhel_version.stdout }}"
+        - "Estado de suscripción: {{ subscription_status.stdout }}"
+        - "Parches pendientes: {{ pending_patches.stdout }}"
+        - "Estado de actualización: {{ update_status.stdout }}"
+      delegate_to: localhost
+      run_once: true
+      tags: save_output
 
     - name: Verificar si la versión de RHEL es la deseada
       assert:
         that:
-          - rhel_version_after.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")
+          - rhel_version.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")
         msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"
-      when: update_status.stdout == ""
       tags: assert_version
-
-    - name: Guardar output del playbook en el filesystem local
-      local_action:
-        module: command
-        args: "cat"
-      with_items:
-        - "{{ lookup('template', 'output.j2') }}"
-      register: output_result
-      run_once: true
-      delegate_to: localhost
-      tags: save_output
-
-    - name: Crear archivo con output del playbook
-      local_action:
-        module: copy
-        content: "{{ output_result.stdout }}"
-        dest: "{{ output_dir }}/{{ output_filename }}"
-      run_once: true
-      delegate_to: localhost
-      tags: create_output_file
