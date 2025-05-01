@@ -8,6 +8,10 @@
     output_filename: "ansible_output_{{ ansible_date_time.year }}_{{ ansible_date_time.month }}_{{ ansible_date_time.day }}_{{ ansible_date_time.hour }}_{{ ansible_date_time.minute }}_{{ ansible_date_time.second }}.txt"
 
   tasks:
+    - name: Recopilar información sobre los paquetes instalados
+      ansible.builtin.package_facts:
+        manager: auto
+
     - name: Verificar versión actual de RHEL
       command: cat /etc/redhat-release
       register: rhel_version
@@ -30,16 +34,12 @@
         msg: "Estado de suscripción: {{ subscription_status.stdout }}"
       tags: show_subscription
 
-    - name: Verificar si el sistema está actualizado
-      command: dnf check-update
-      register: update_status
-      failed_when: update_status.rc != 0
-      tags: check_update
-
-    - name: Mostrar estado de actualización
-      debug:
-        msg: "Estado de actualización: {{ update_status.stdout }}"
-      tags: show_update
+    - name: Verificar si la versión de RHEL es la deseada
+      assert:
+        that:
+          - rhel_version.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")
+        msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"
+      tags: assert_version
 
     - name: Guardar output del playbook en el filesystem local
       ansible.builtin.lineinfile:
@@ -49,14 +49,6 @@
       with_items:
         - "Versión actual de RHEL: {{ rhel_version.stdout }}"
         - "Estado de suscripción: {{ subscription_status.stdout }}"
-        - "Estado de actualización: {{ update_status.stdout }}"
       delegate_to: localhost
       run_once: true
       tags: save_output
-
-    - name: Verificar si la versión de RHEL es la deseada
-      assert:
-        that:
-          - rhel_version.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")
-        msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"
-      tags: assert_version
