@@ -1,20 +1,15 @@
 ---
-- name: Validar pre-requisitos de actualización a RHEL 8.x y reportar paquetes faltantes
+- name: Informe previo a la actualización de RHEL 8.x a RHEL 8.10
   hosts: all
   become: true
   vars:
     output_dir: "/tmp"
-    output_filename: "ansible_output_{{ ansible_date_time.year }}_{{ ansible_date_time.month }}_{{ ansible_date_time.day }}_{{ ansible_date_time.hour }}_{{ ansible_date_time.minute }}_{{ ansible_date_time.second }}.txt"
+    output_filename: "pre_upgrade_report_{{ ansible_date_time.year }}_{{ ansible_date_time.month }}_{{ ansible_date_time.day }}_{{ ansible_date_time.hour }}_{{ ansible_date_time.minute }}_{{ ansible_date_time.second }}.txt"
 
   tasks:
-    - name: Recopilar información sobre los paquetes instalados
-      ansible.builtin.package_facts:
-        manager: auto
-
     - name: Verificar versión actual de RHEL
       command: cat /etc/redhat-release
       register: rhel_version
-      failed_when: rhel_version.stdout is not search("Red Hat Enterprise Linux release 8")
 
     - name: Mostrar versión actual de RHEL
       debug:
@@ -39,7 +34,7 @@
         msg: "{{ available_packages.stdout_lines }}"
       when: available_packages.stdout_lines | length > 0
 
-    - name: Guardar output del playbook en el filesystem del servidor remoto
+    - name: Guardar informe previo a la actualización en el filesystem del servidor remoto
       ansible.builtin.lineinfile:
         path: "{{ output_dir }}/{{ output_filename }}"
         create: yes
