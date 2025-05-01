@@ -1,60 +1,71 @@
 ---
-- name: Validar pre-requisitos de actualización a RHEL 8.10  # Nombre del playbook
-  hosts: all  # Se ejecuta en todos los hosts definidos en el inventario
-  become: true  # Utiliza privilegios de superusuario para ejecutar comandos
+- name: Validar pre-requisitos de actualización a RHEL 8.10
+  hosts: all
+  become: true
   vars:
-    desired_rhel_version: "8.10"  # Versión deseada de RHEL
+    desired_rhel_version: "8.10"
 
   tasks:
-    - name: Verificar versión actual de RHEL  # Verifica la versión actual de RHEL
-      command: cat /etc/redhat-release  # Lee el archivo que contiene la versión de RHEL
-      register: rhel_version  # Almacena el resultado en la variable rhel_version
-      failed_when: rhel_version.stdout is not search("Red Hat Enterprise Linux release 8")  # Falla si no es RHEL 8
+    - name: Verificar versión actual de RHEL
+      command: cat /etc/redhat-release
+      register: rhel_version
+      failed_when: rhel_version.stdout is not search("Red Hat Enterprise Linux release 8")
+      tags: check_version
 
-    - name: Mostrar versión actual de RHEL  # Muestra la versión actual de RHEL
+    - name: Mostrar versión actual de RHEL
       debug:
-        msg: "Versión actual de RHEL: {{ rhel_version.stdout }}"  # Muestra el mensaje con la versión actual
+        msg: "Versión actual de RHEL: {{ rhel_version.stdout }}"
+      tags: show_version
 
-    - name: Verificar suscripción de RHEL  # Verifica si el sistema está suscrito a Red Hat
-      command: subscription-manager status  # Ejecuta el comando para verificar el estado de suscripción
-      register: subscription_status  # Almacena el resultado en la variable subscription_status
-      failed_when: subscription_status.rc != 0  # Falla si el comando no se ejecuta correctamente
+    - name: Verificar suscripción de RHEL
+      command: subscription-manager status
+      register: subscription_status
+      failed_when: subscription_status.rc != 0
+      tags: check_subscription
 
-    - name: Mostrar estado de suscripción  # Muestra el estado de suscripción
+    - name: Mostrar estado de suscripción
       debug:
-        msg: "Estado de suscripción: {{ subscription_status.stdout }}"  # Muestra el mensaje con el estado de suscripción
+        msg: "Estado de suscripción: {{ subscription_status.stdout }}"
+      tags: show_subscription
 
-    - name: Verificar parches pendientes  # Verifica si hay parches de seguridad pendientes
-      command: yum check-update --security  # Ejecuta el comando para verificar parches de seguridad
-      register: pending_patches  # Almacena el resultado en la variable pending_patches
-      failed_when: pending_patches.rc != 0  # Falla si el comando no se ejecuta correctamente
+    - name: Verificar parches pendientes
+      command: yum check-update --security
+      register: pending_patches
+      failed_when: pending_patches.rc != 0
+      tags: check_patches
 
-    - name: Mostrar parches pendientes  # Muestra los parches pendientes
+    - name: Mostrar parches pendientes
       debug:
-        msg: "Parches pendientes: {{ pending_patches.stdout }}"  # Muestra el mensaje con los parches pendientes
+        msg: "Parches pendientes: {{ pending_patches.stdout }}"
+      tags: show_patches
 
-    - name: Verificar si el sistema está actualizado  # Verifica si el sistema está completamente actualizado
-      command: yum check-update  # Ejecuta el comando para verificar actualizaciones pendientes
-      register: update_status  # Almacena el resultado en la variable update_status
-      failed_when: update_status.stdout != ""  # Falla si hay actualizaciones pendientes
+    - name: Verificar si el sistema está actualizado
+      command: yum check-update
+      register: update_status
+      failed_when: update_status.stdout != ""
+      tags: check_update
 
-    - name: Mostrar estado de actualización  # Muestra el estado de actualización del sistema
+    - name: Mostrar estado de actualización
       debug:
-        msg: "Estado de actualización: {{ update_status.stdout }}"  # Muestra el mensaje con el estado de actualización
+        msg: "Estado de actualización: {{ update_status.stdout }}"
+      tags: show_update
 
-    - name: Verificar versión de RHEL después de actualización  # Verifica la versión de RHEL después de la actualización
-      command: cat /etc/redhat-release  # Lee el archivo que contiene la versión de RHEL
-      register: rhel_version_after  # Almacena el resultado en la variable rhel_version_after
-      when: update_status.stdout == ""  # Solo ejecuta si no hay actualizaciones pendientes
+    - name: Verificar versión de RHEL después de actualización
+      command: cat /etc/redhat-release
+      register: rhel_version_after
+      when: update_status.stdout == ""
+      tags: check_version_after
 
-    - name: Mostrar versión de RHEL después de actualización  # Muestra la versión de RHEL después de la actualización
+    - name: Mostrar versión de RHEL después de actualización
       debug:
-        msg: "Versión de RHEL después de actualización: {{ rhel_version_after.stdout }}"  # Muestra el mensaje con la versión actualizada
-      when: update_status.stdout == ""  # Solo ejecuta si no hay actualizaciones pendientes
+        msg: "Versión de RHEL después de actualización: {{ rhel_version_after.stdout }}"
+      when: update_status.stdout == ""
+      tags: show_version_after
 
-    - name: Verificar si la versión de RHEL es la deseada  # Verifica si la versión actualizada es la deseada
+    - name: Verificar si la versión de RHEL es la deseada
       assert:
         that:
-          - rhel_version_after.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")  # Verifica la versión deseada
-        msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"  # Mensaje de error si no es la versión deseada
-      when: update_status.stdout == ""  # Solo ejecuta si no hay actualizaciones pendientes
+          - rhel_version_after.stdout is search("Red Hat Enterprise Linux release {{ desired_rhel_version }}")
+        msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"
+      when: update_status.stdout == ""
+      tags: assert_version
