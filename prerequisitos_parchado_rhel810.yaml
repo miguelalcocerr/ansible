@@ -1,9 +1,11 @@
 ---
-- name: Validar pre-requisitos de actualización a RHEL 8.10
+- name: Validar pre-requisitos de actualización a RHEL 8.10 y guardar output
   hosts: all
   become: true
   vars:
     desired_rhel_version: "8.10"
+    output_dir: "/tmp"
+    output_filename: "ansible_output_{{ ansible_date_time.year }}_{{ ansible_date_time.month }}_{{ ansible_date_time.day }}_{{ ansible_date_time.hour }}_{{ ansible_date_time.minute }}_{{ ansible_date_time.second }}.txt"
 
   tasks:
     - name: Verificar versión actual de RHEL
@@ -69,3 +71,23 @@
         msg: "La versión de RHEL no es la deseada ({{ desired_rhel_version }})"
       when: update_status.stdout == ""
       tags: assert_version
+
+    - name: Guardar output del playbook en el filesystem local
+      local_action:
+        module: command
+        args: "cat"
+      with_items:
+        - "{{ lookup('template', 'output.j2') }}"
+      register: output_result
+      run_once: true
+      delegate_to: localhost
+      tags: save_output
+
+    - name: Crear archivo con output del playbook
+      local_action:
+        module: copy
+        content: "{{ output_result.stdout }}"
+        dest: "{{ output_dir }}/{{ output_filename }}"
+      run_once: true
+      delegate_to: localhost
+      tags: create_output_file
