@@ -61,7 +61,7 @@
 
     - name: Parse pending updates
       ansible.builtin.set_fact:
-        pending_updates_list: "{{ dnf_pending_updates.stdout_lines | select('notmatch', '^\\s*$') | select('notmatch', '^(Last metadata|Security notice)') | list }}"
+        pending_updates_list: "{{ dnf_pending_updates.stdout_lines | reject('match', '^\\s*$') | reject('match', '^(Last metadata|Security notice)') | list }}"
       when: dnf_pending_updates.rc == 100 or dnf_pending_updates.rc == 0
 
     - name: Set pending updates to empty if none are found
