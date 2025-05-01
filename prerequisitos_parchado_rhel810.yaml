@@ -1,46 +1,43 @@
 ---
 - name: Validar pre-requisitos para actualización a RHEL 8.10
-  hosts: all
-  become: yes
-  vars:
-    target_release: "8.10"  # Versión objetivo de RHEL
+  hosts: all
+  become: yes
+  vars:
+    target_release: "8.10"  # Versión objetivo de RHEL
 
-  tasks:
-    # Tarea 1: Verificar suscripción al sistema
-    - name: Validar estado de suscripción a Red Hat
-      ansible.builtin.command: subscription-manager status
-      register: subscription_status
-      ignore_errors: yes  # Continuar incluso si falla para capturar el error
-      changed_when: false  # Siempre es una tarea de verificación (no cambia estado)
+  tasks:
+    # Tarea 1: Verificar suscripción al sistema
+    - name: Validar estado de suscripción a Red Hat
+      ansible.builtin.command: subscription-manager status
+      register: subscription_status
+      ignore_errors: yes  # Continuar incluso si falla para capturar el error
+      changed_when: false  # Siempre es una tarea de verificación (no cambia estado)
 
-    # Tarea 2: Verificar actualizaciones disponibles para el release objetivo
-    - name: Verificar actualizaciones disponibles para RHEL {{ target_release }}
-      ansible.builtin.command: |
-        yum check-update --releasever={{ target_release }}
-      register: yum_check_update
-      ignore_errors: yes  # yum devuelve 100 cuando hay actualizaciones
-      changed_when: false
-      when: subscription_status.rc == 0  # Solo ejecutar si el sistema está suscrito
+    # Tarea 2: Verificar actualizaciones disponibles para el release objetivo
+    - name: Verificar actualizaciones disponibles para RHEL {{ target_release }}
+      ansible.builtin.command: |
+        yum check-update --releasever={{ target_release }}
+      register: yum_check_update
+      ignore_errors: yes  # yum devuelve 100 cuando hay actualizaciones
+      changed_when: false
+      when: subscription_status.rc == 0  # Solo ejecutar si el sistema está suscrito
 
-    # Tarea 3: Mostrar resumen de validación
-    - name: Mostrar resultados de validación
-      ansible.builtin.debug:
-        msg: |
-          RESULTADOS DE VALIDACIÓN:
-          - Estado suscripción: {{ 'ACTIVA' if subscription_status.rc == 0 else 'INACTIVA o ERROR' }}
-          {% if subscription_status.rc == 0 %}
-          - Actualizaciones pendientes: {{ (yum_check_update.stdout_lines|length - 1)|default(0) }}
-          - Detalles actualizaciones disponibles: {{ yum_check_update.stdout_lines[1:]|join('\n  ') }}
-          {% endif %}
-      var: msg
-      failed_when: subscription_status.rc != 0  # Fallar si no hay suscripción activa
+    # Tarea 3: Mostrar resumen de validación
+    - name: Mostrar resultados de validación
+      ansible.builtin.debug:
+        msg: |
+          RESULTADOS DE VALIDACIÓN:
+          - Estado suscripción: {{ 'ACTIVA' if subscription_status.rc == 0 else 'INACTIVA o ERROR' }}
+          {% if subscription_status.rc == 0 %}
+          - Actualizaciones pendientes: {{ (yum_check_update.stdout_lines|length - 1)|default(0) }}
+          - Detalles actualizaciones disponibles: {{ yum_check_update.stdout_lines[1:]|join('\n  ') }}
+          {% endif %}
+      failed_when: subscription_status.rc != 0  # Fallar si no hay suscripción activa
 
-    # Tarea 4: Verificar espacio en disco disponible
-    - name: Verificar espacio en disco en / y /boot
-      ansible.builtin.shell: |
-        df -h / /boot | awk 'NR>1 {print $4 " libres en " $6}'
-      register: disk_space
-      changed_when: false
-      ignore_errors: yes
-
-    
+    # Tarea 4: Verificar espacio en disco disponible
+    - name: Verificar espacio en disco en / y /boot
+      ansible.builtin.shell: |
+        df -h / /boot | awk 'NR>1 {print $4 " libres en " $6}'
+      register: disk_space
+      changed_when: false
+      ignore_errors: yes
