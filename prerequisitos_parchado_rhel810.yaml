@@ -30,17 +30,6 @@
         msg: "Estado de suscripción: {{ subscription_status.stdout }}"
       tags: show_subscription
 
-    - name: Verificar parches pendientes
-      command: dnf check-update --security
-      register: pending_patches
-      failed_when: pending_patches.rc != 0
-      tags: check_patches
-
-    - name: Mostrar parches pendientes
-      debug:
-        msg: "Parches pendientes: {{ pending_patches.stdout }}"
-      tags: show_patches
-
     - name: Verificar si el sistema está actualizado
       command: dnf check-update
       register: update_status
@@ -60,7 +49,6 @@
       with_items:
         - "Versión actual de RHEL: {{ rhel_version.stdout }}"
         - "Estado de suscripción: {{ subscription_status.stdout }}"
-        - "Parches pendientes: {{ pending_patches.stdout }}"
         - "Estado de actualización: {{ update_status.stdout }}"
       delegate_to: localhost
       run_once: true
