@@ -33,7 +33,7 @@
           - Detalles actualizaciones disponibles: {{ yum_check_update.stdout_lines[1:]|join('\n  ') }}
           {% endif %}
       var: msg
-      #failed_when: subscription_status.rc != 0  # Fallar si no hay suscripción activa
+      failed_when: subscription_status.rc != 0  # Fallar si no hay suscripción activa
 
     # Tarea 4: Verificar espacio en disco disponible
     - name: Verificar espacio en disco en / y /boot
@@ -43,8 +43,4 @@
       changed_when: false
       ignore_errors: yes
 
-    # Tarea 5: Mostrar espacio en disco
-    - name: Mostrar espacio disponible en discos críticos
-      ansible.builtin.debug:
-        msg: "Espacio en disco:\n{{ disk_space.stdout_lines | join('\n') }}"
-      when: disk_space.stdout_lines is defined
+    
