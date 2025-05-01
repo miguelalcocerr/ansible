@@ -33,18 +33,25 @@
       changed_when: false
       failed_when: false
 
-    - name: Check required packages
-      ansible.builtin.package:
-        name: "{{ required_packages }}"
-        state: present
-      check_mode: yes
-      register: package_check
-      failed_when: false
+    - name: Check if required packages are installed
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Determine missing packages
+      ansible.builtin.set_fact:
+        missing_packages_list: "{{ required_packages | difference(ansible_facts.packages.keys() | list) }}"
+      when: ansible_facts.packages is defined
 
     - name: Count missing packages
       ansible.builtin.set_fact:
-        missing_packages: "{{ package_check.results | select('attr', 'changed') | list | length }}"
-        missing_packages_list: "{{ package_check.results | select('attr', 'changed') | map('attr', 'name') | list }}"
+        missing_packages: "{{ missing_packages_list | length }}"
+      when: missing_packages_list is defined
+
+    - name: Set missing packages to 0 if none are missing
+      ansible.builtin.set_fact:
+        missing_packages: 0
+        missing_packages_list: []
+      when: missing_packages_list is not defined
 
     - name: Create report content
       ansible.builtin.set_fact:
@@ -72,14 +79,6 @@
           Missing packages count: {{ missing_packages }}
           Missing packages: {{ missing_packages_list | join(', ') | default('None') }}
 
-    - name: Generate report file
-      ansible.builtin.copy:
-        content: "{{ report_content }}"
-        dest: "{{ report_file }}"
-        mode: '0644'
-      delegate_to: localhost
-      when: not ansible_check_mode
-
     - name: Ensure report file exists on target
       ansible.builtin.file:
         path: "{{ report_file }}"
@@ -93,13 +92,6 @@
         dest: "{{ report_file }}"
         mode: '0644'
       when: not ansible_check_mode
-
-  handlers:
-    - name: Clean up temporary files
-      ansible.builtin.file:
-        path: "{{ report_file }}"
-        state: absent
-      when: ansible_check_mode
 
   pre_tasks:
     - name: Verify sudo privileges
