@@ -1,44 +1,115 @@
 ---
-- name: Informe previo a la actualización de RHEL 8.x a RHEL 8.10
+- name: Validate RHEL prerequisites and generate report
   hosts: all
-  become: true
+  become: yes
   vars:
-    output_dir: "/tmp"
-    output_filename: "pre_upgrade_report_{{ ansible_date_time.year }}_{{ ansible_date_time.month }}_{{ ansible_date_time.day }}_{{ ansible_date_time.hour }}_{{ ansible_date_time.minute }}_{{ ansible_date_time.second }}.txt"
-
+    report_file: /tmp/rhel_prerequisites_report.txt
+    required_packages:
+      - vim
+      - curl
+      - wget
+      - net-tools
   tasks:
-    - name: Verificar versión actual de RHEL
-      command: cat /etc/redhat-release
-      register: rhel_version
+    - name: Gather system facts
+      ansible.builtin.setup:
+        gather_subset:
+          - '!all'
+          - 'distribution'
+          - 'pkg_mgr'
 
-    - name: Mostrar versión actual de RHEL
-      debug:
-        msg: "Versión actual de RHEL: {{ rhel_version.stdout }}"
+    - name: Check RHEL version
+      ansible.builtin.set_fact:
+        rhel_version: "{{ ansible_distribution }} {{ ansible_distribution_version }} ({{ ansible_distribution_release }})"
 
-    - name: Verificar suscripción de RHEL
-      command: subscription-manager status
+    - name: Check subscription status
+      ansible.builtin.command: subscription-manager status
       register: subscription_status
-      failed_when: subscription_status.rc != 0
-
-    - name: Mostrar estado de suscripción
-      debug:
-        msg: "Estado de suscripción: {{ subscription_status.stdout }}"
-
-    - name: Obtener lista de paquetes disponibles para instalación
-      command: dnf list available --quiet
-      register: available_packages
       changed_when: false
+      failed_when: false
 
-    - name: Mostrar lista de paquetes disponibles para instalación
-      debug:
-        msg: "{{ available_packages.stdout_lines }}"
-      when: available_packages.stdout_lines | length > 0
+    - name: Get subscription details
+      ansible.builtin.command: subscription-manager list --installed
+      register: subscription_details
+      changed_when: false
+      failed_when: false
 
-    - name: Guardar informe previo a la actualización en el filesystem del servidor remoto
-      ansible.builtin.lineinfile:
-        path: "{{ output_dir }}/{{ output_filename }}"
-        create: yes
-      with_items:
-        - "Versión actual de RHEL: {{ rhel_version.stdout }}"
-        - "Estado de suscripción: {{ subscription_status.stdout }}"
-        - "Paquetes disponibles para instalación: {{ available_packages.stdout_lines | join(', ') }}"
+    - name: Check required packages
+      ansible.builtin.package:
+        name: "{{ required_packages }}"
+        state: present
+      check_mode: yes
+      register: package_check
+      failed_when: false
+
+    - name: Count missing packages
+      ansible.builtin.set_fact:
+        missing_packages: "{{ package_check.results | select('attr', 'changed') | list | length }}"
+        missing_packages_list: "{{ package_check.results | select('attr', 'changed') | map('attr', 'name') | list }}"
+
+    - name: Create report content
+      ansible.builtin.set_fact:
+        report_content: |
+          RHEL Prerequisites Report
+          =======================
+          Generated on: {{ ansible_date_time.iso8601 }}
+          Hostname: {{ ansible_hostname }}
+          
+          1. RHEL Version
+          ---------------
+          {{ rhel_version }}
+          
+          2. Subscription Status
+          ---------------------
+          {{ subscription_status.stdout | default('No subscription information available') }}
+          
+          3. Subscription Details
+          ----------------------
+          {{ subscription_details.stdout | default('No subscription details available') }}
+          
+          4. Package Status
+          ----------------
+          Required packages: {{ required_packages | join(', ') }}
+          Missing packages count: {{ missing_packages }}
+          Missing packages: {{ missing_packages_list | join(', ') | default('None') }}
+
+    - name: Generate report file
+      ansible.builtin.copy:
+        content: "{{ report_content }}"
+        dest: "{{ report_file }}"
+        mode: '0644'
+      delegate_to: localhost
+      when: not ansible_check_mode
+
+    - name: Ensure report file exists on target
+      ansible.builtin.file:
+        path: "{{ report_file }}"
+        state: touch
+        mode: '0644'
+      when: not ansible_check_mode
+
+    - name: Copy report to target
+      ansible.builtin.copy:
+        content: "{{ report_content }}"
+        dest: "{{ report_file }}"
+        mode: '0644'
+      when: not ansible_check_mode
+
+  handlers:
+    - name: Clean up temporary files
+      ansible.builtin.file:
+        path: "{{ report_file }}"
+        state: absent
+      when: ansible_check_mode
+
+  pre_tasks:
+    - name: Verify sudo privileges
+      ansible.builtin.command: whoami
+      register: whoami_result
+      changed_when: false
+      failed_when: whoami_result.stdout != 'root'
+
+  post_tasks:
+    - name: Display report location
+      ansible.builtin.debug:
+        msg: "Report generated at: {{ report_file }}"
+      when: not ansible_check_mode
