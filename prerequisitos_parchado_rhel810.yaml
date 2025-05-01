@@ -53,6 +53,22 @@
         missing_packages_list: []
       when: missing_packages_list is not defined
 
+    - name: Check for pending updates with dnf
+      ansible.builtin.command: dnf check-update
+      register: dnf_pending_updates
+      changed_when: false
+      failed_when: false
+
+    - name: Parse pending updates
+      ansible.builtin.set_fact:
+        pending_updates_list: "{{ dnf_pending_updates.stdout_lines | select('notmatch', '^\\s*$') | select('notmatch', '^(Last metadata|Security notice)') | list }}"
+      when: dnf_pending_updates.rc == 100 or dnf_pending_updates.rc == 0
+
+    - name: Set pending updates to empty if none are found
+      ansible.builtin.set_fact:
+        pending_updates_list: []
+      when: dnf_pending_updates.rc != 100
+
     - name: Create report content
       ansible.builtin.set_fact:
         report_content: |
@@ -78,6 +94,18 @@
           Required packages: {{ required_packages | join(', ') }}
           Missing packages count: {{ missing_packages }}
           Missing packages: {{ missing_packages_list | join(', ') | default('None') }}
+          
+          5. Pending Updates (dnf update)
+          ------------------------------
+          {% if pending_updates_list | length > 0 %}
+          Pending updates count: {{ pending_updates_list | length }}
+          Pending updates:
+          {% for update in pending_updates_list %}
+          - {{ update }}
+          {% endfor %}
+          {% else %}
+          No pending updates available.
+          {% endif %}
 
     - name: Ensure report file exists on target
       ansible.builtin.file:
