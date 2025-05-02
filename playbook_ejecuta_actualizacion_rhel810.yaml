@@ -1,0 +1,102 @@
+---
+- name: Actualización de RHEL 8.1 con reinicio controlado
+  hosts: all
+  gather_facts: true
+  become: yes
+  vars:
+    log_file: "/tmp/actualizacion_rhel_{{ ansible_hostname }}.txt"
+    confirmar_reinicio: false
+
+  tasks:
+    # 1. Registro inicial
+    - name: Iniciar registro de actualización
+      copy:
+        content: |
+          ===== REGISTRO DE ACTUALIZACIÓN RHEL =====
+          Host: {{ ansible_hostname }}
+          Versión inicial: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Fecha inicio: {{ ansible_date_time.iso8601 }}
+          ==========================================
+        dest: "{{ log_file }}"
+        mode: '0644'
+
+    # 2. Actualización del sistema
+    - name: Ejecutar actualización completa
+      dnf:
+        name: '*'
+        state: latest
+        update_cache: yes
+      register: update_result
+      async: 3600
+      poll: 15
+
+    # 3. Verificación de necesidad de reinicio (VERSIÓN CORREGIDA)
+    - name: Verificar paquetes que requieren reinicio
+      shell: |
+        if rpm -q --last kernel >/dev/null 2>&1; then
+          echo "kernel_updated"
+        fi
+        needs-restarting -r 2>/dev/null || echo "no_reboot_needed"
+      register: reboot_check
+      changed_when: false
+      ignore_errors: yes
+
+    # 4. Confirmación de reinicio (VERSIÓN CORREGIDA)
+    - name: Solicitar confirmación para reinicio
+      pause:
+        prompt: |
+          [ATENCIÓN] Se detectaron actualizaciones que requieren reinicio:
+          {{ reboot_check.stdout }}
+
+          ¿Desea reiniciar el sistema ahora? (s/n)
+        echo: yes
+      when: 
+        - "'kernel_updated' in reboot_check.stdout or 'Reboot is required' in reboot_check.stdout"
+        - not confirmar_reinicio | bool
+      register: reinicio_confirmado
+
+    # 5. Reinicio controlado
+    - name: Reiniciar sistema
+      reboot:
+        msg: "Reinicio por actualización del sistema"
+        connect_timeout: 30
+        reboot_timeout: 600
+        pre_reboot_delay: 30
+      when: 
+        - "'kernel_updated' in reboot_check.stdout or 'Reboot is required' in reboot_check.stdout"
+        - reinicio_confirmado.user_input|default('s') == 's' or confirmar_reinicio | bool
+
+    # 6. Esperar reconexión
+    - name: Esperar a que el sistema esté disponible
+      wait_for_connection:
+        delay: 10
+        timeout: 300
+      when: 
+        - "'kernel_updated' in reboot_check.stdout or 'Reboot is required' in reboot_check.stdout"
+        - reinicio_confirmado.user_input|default('s') == 's' or confirmar_reinicio | bool
+
+    # 7. Verificación post-actualización
+    - name: Validar actualización
+      block:
+        - name: Obtener versión actual
+          command: cat /etc/redhat-release
+          register: post_version
+          changed_when: false
+
+        - name: Registrar resultado
+          blockinfile:
+            path: "{{ log_file }}"
+            marker: "# {mark} RESULTADO FINAL #"
+            block: |
+              === ACTUALIZACIÓN COMPLETADA ===
+              * Versión final: {{ post_version.stdout }}
+              * Reinicio realizado: {{ 'Sí' if ('kernel_updated' in reboot_check.stdout) else 'No' }}
+              * Hora finalización: {{ ansible_date_time.iso8601 }}
+      when: ansible_date_time.iso8601 is defined
+
+    # 8. Mensaje final
+    - name: Mostrar resumen
+      debug:
+        msg: |
+          Proceso completado. Detalles en {{ log_file }}
+          Versión actual: {{ post_version.stdout | default('No disponible') }}
