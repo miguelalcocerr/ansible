@@ -1,6 +1,6 @@
 ---
 - name: Actualización de RHEL 8.1 con reinicio controlado
-  hosts: servers
+  hosts: all
   gather_facts: true
   become: yes
   vars:
