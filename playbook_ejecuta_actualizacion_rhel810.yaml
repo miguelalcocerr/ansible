@@ -1,0 +1,30 @@
+---
+- name: Actualizar RHEL 8.x a RHEL 8.10 (Optimizado)
+  hosts: all
+  become: true  # Ejecutar como root automáticamente
+
+  tasks:
+    - name: Verificar la versión actual de RHEL
+      command: cat /etc/redhat-release
+      register: current_version
+      changed_when: false
+
+    - name: Mostrar versión antes de actualizar
+      debug:
+        msg: "Versión actual: {{ current_version.stdout }}"
+
+    - name: Habilitar los repositorios necesarios para la actualización
+      command: subscription-manager repos --enable=rhel-8-for-x86_64-baseos-rpms --enable=rhel-8-for-x86_64-appstream-rpms
+
+    - name: Limpiar y actualizar caché
+      command: dnf clean all && dnf makecache
+
+    - name: Aplicar actualización completa del sistema
+      command: dnf distro-sync -y
+      register: update_status
+
+    - name: Forzar reinicio después de la actualización
+      reboot:
+        reboot_timeout: 600
+        test_command: "uptime"
+      when: update_status is changed
