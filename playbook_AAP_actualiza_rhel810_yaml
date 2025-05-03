@@ -1,5 +1,5 @@
 ---
-- name: Actualización del sistema operativo RHEL 8.x y reinicio automático si es necesario
+- name: Actualización del sistema operativo RHEL 8.x a RHEL 8.10 y reinicio automático si es necesario
   hosts: all
   gather_facts: true
   become: yes
@@ -73,3 +73,9 @@
           * Versión final: {{ final_version.stdout }}
           * Reinicio realizado: {{ 'Sí' if reboot_needed.stdout is search("is required") else 'No' }}
           * Hora finalización: {{ ansible_date_time.iso8601 }}
+
+    - name: Verificar si la versión final es RHEL 8.10
+      assert:
+        that:
+          - final_version.stdout is search("Red Hat Enterprise Linux release 8.10")
+        msg: "La versión final no es RHEL 8.10"
