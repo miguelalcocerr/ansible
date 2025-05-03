@@ -1,5 +1,5 @@
 ---
-- name: Actualizar RHEL 8.x a RHEL 8.10 (Optimizado)
+- name: Actualizar RHEL 8.x a RHEL 8.10
   hosts: all
   become: true  # Ejecutar como root automáticamente
 
@@ -16,8 +16,12 @@
     - name: Habilitar los repositorios necesarios para la actualización
       command: subscription-manager repos --enable=rhel-8-for-x86_64-baseos-rpms --enable=rhel-8-for-x86_64-appstream-rpms
 
-    - name: Limpiar y actualizar caché
-      command: dnf clean all && dnf makecache
+    - name: Limpiar y actualizar caché correctamente
+      shell: |
+        dnf clean all
+        dnf makecache
+      args:
+        executable: /bin/bash
 
     - name: Aplicar actualización completa del sistema
       command: dnf distro-sync -y
@@ -27,4 +31,4 @@
       reboot:
         reboot_timeout: 600
         test_command: "uptime"
-      when: update_status is changed
+      when: update_status.changed
