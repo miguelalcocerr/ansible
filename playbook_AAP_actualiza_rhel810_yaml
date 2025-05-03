@@ -43,17 +43,30 @@
 
     # 4. Confirmación de reinicio (VERSIÓN CORREGIDA)
     - name: Solicitar confirmación para reinicio
-      pause:
-        prompt: |
-          [ATENCIÓN] Se detectaron actualizaciones que requieren reinicio:
-          {{ reboot_check.stdout }}
+      block:
+        - name: Preguntar si desea reiniciar
+          set_fact:
+            confirm_reboot: "{{ confirmar_reinicio | bool }}"
+        - name: Esperar respuesta del usuario
+          set_fact:
+            confirm_reboot: true
+          when: not confirm_reboot | bool
+        - name: Mostrar mensaje de confirmación
+          debug:
+            msg: |
+              [ATENCIÓN] Se detectaron actualizaciones que requieren reinicio:
+              {{ reboot_check.stdout }}
 
-          ¿Desea reiniciar el sistema ahora? (s/n)
-        echo: yes
+              ¿Desea reiniciar el sistema ahora? (s/n)
+          when: not confirm_reboot | bool
+        - name: Esperar respuesta del usuario
+          pause:
+            prompt: "Presione 'Enter' para continuar"
+            echo: no
+          when: not confirm_reboot | bool
       when: 
         - "'kernel_updated' in reboot_check.stdout or 'Reboot is required' in reboot_check.stdout"
         - not confirmar_reinicio | bool
-      register: reinicio_confirmado
 
     # 5. Reinicio controlado
     - name: Reiniciar sistema
@@ -64,7 +77,7 @@
         pre_reboot_delay: 30
       when: 
         - "'kernel_updated' in reboot_check.stdout or 'Reboot is required' in reboot_check.stdout"
-        - reinicio_confirmado.user_input|default('s') == 's' or confirmar_reinicio | bool
+        - confirm_reboot | bool
 
     # 6. Esperar reconexión
     - name: Esperar a que el sistema esté disponible
@@ -73,7 +86,7 @@
         timeout: 300
       when: 
         - "'kernel_updated' in reboot_check.stdout or 'Reboot is required' in reboot_check.stdout"
-        - reinicio_confirmado.user_input|default('s') == 's' or confirmar_reinicio | bool
+        - confirm_reboot | bool
 
     # 7. Verificación post-actualización
     - name: Validar actualización
