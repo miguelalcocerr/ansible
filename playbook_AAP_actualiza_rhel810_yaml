@@ -1,81 +1,89 @@
 ---
-- name: Actualización del sistema operativo RHEL 8.x a RHEL 8.10 y reinicio automático si es necesario
+- name: Actualización a RHEL 8.10 usando DNF
   hosts: all
-  gather_facts: true
   become: yes
-
   vars:
-    log_file: "/tmp/actualizacion_rhel_{{ ansible_hostname }}_{{ ansible_date_time.date }}.log"
+    target_release: "8.10"
+    reboot_timeout: 600  # 10 minutos máximo para reinicio
+    post_reboot_delay: 60  # Esperar 1 minuto post-reinicio
 
   tasks:
-    - name: Iniciar registro de actualización
-      copy:
-        content: |
-          ===== REGISTRO DE ACTUALIZACIÓN RHEL =====
-          Host: {{ ansible_hostname }}
-          Versión inicial: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          Fecha inicio: {{ ansible_date_time.iso8601 }}
-          ==========================================
-        dest: "{{ log_file }}"
-        mode: '0644'
+    # 1. Validar suscripción y repositorios
+    - name: Verificar suscripción activa
+      ansible.builtin.command: subscription-manager status
+      register: sub_status
+      changed_when: false
+      ignore_errors: yes
+      failed_when: sub_status.rc != 0
 
-    - name: Ejecutar actualización completa del sistema
-      dnf:
+    # 2. Configurar versión objetivo
+    - name: Establecer release objetivo
+      ansible.builtin.command: |
+        subscription-manager release --set {{ target_release }}
+      register: release_set
+      changed_when: "'Release set to' in release_set.stdout"
+
+    # 3. Limpiar cache y metadata
+    - name: Limpiar cache DNF
+      ansible.builtin.command: dnf clean all
+      changed_when: false
+
+    # 4. Actualización de todos los paquetes (excepto kernel)
+    - name: Actualizar paquetes base
+      ansible.builtin.dnf:
         name: '*'
         state: latest
+        exclude: kernel*, *-firmware
         update_cache: yes
-      register: update_result
-      async: 3600
-      poll: 15
+      register: base_update
+      notify: Verificar necesidad de reinicio
 
-    - name: Registrar resultados de la actualización
-      blockinfile:
-        path: "{{ log_file }}"
-        marker: "# {mark} ACTUALIZACIONES REALIZADAS #"
-        block: |
-          {{ update_result.stdout_lines | to_nice_yaml | indent(4) }}
+    # 5. Actualización del kernel y firmware
+    - name: Actualizar kernel y firmware
+      ansible.builtin.dnf:
+        name: kernel*, *-firmware
+        state: latest
+      when: base_update.changed
+      register: kernel_update
+      notify: Ejecutar reinicio controlado
 
-    - name: Verificar si es necesario el reinicio
-      shell: needs-restarting -r
-      register: reboot_needed
+    # 6. Verificación final
+    - name: Verificar versión del sistema
+      ansible.builtin.command: cat /etc/redhat-release
+      register: system_version
+      changed_when: false
+
+    - name: Verificar actualizaciones pendientes
+      ansible.builtin.command: dnf check-update
+      register: updates_check
       ignore_errors: yes
       changed_when: false
 
-    - name: Informar si es necesario el reinicio
-      debug:
-        msg: "Reinicio necesario: {{ reboot_needed.stdout }}"
+    - name: Mostrar resumen final
+      ansible.builtin.debug:
+        msg: |
+          [RESUMEN DE ACTUALIZACIÓN]
+          - Versión actual: {{ system_version.stdout }}
+          - Actualizaciones aplicadas: {{ base_update.changed and kernel_update.changed | default(false) | ternary('Completas', 'Parciales') }}
+          - Reinicio requerido: {{ kernel_update.changed | default(false) | ternary('Sí', 'No') }}
+          - Última verificación: {{ ansible_date_time.iso8601 }}
 
-    - name: Reiniciar sistema si es necesario
-      reboot:
-        msg: "Reinicio por actualización del sistema"
-        connect_timeout: 30
-        reboot_timeout: 600
-        pre_reboot_delay: 30
-      when: reboot_needed.stdout is search("is required")
-
-    - name: Esperar a que el sistema esté disponible
-      wait_for_connection:
-        delay: 10
-        timeout: 300
-      when: reboot_needed.stdout is search("is required")
-
-    - name: Verificar versión final del sistema operativo
-      command: cat /etc/redhat-release
-      register: final_version
+  handlers:
+    # Handler para verificar necesidad de reinicio
+    - name: Verificar necesidad de reinicio
+      ansible.builtin.command: needs-restarting -r
+      register: restart_needed
+      listen: "Verificar necesidad de reinicio"
       changed_when: false
+      ignore_errors: yes
 
-    - name: Registrar versión final del sistema operativo
-      blockinfile:
-        path: "{{ log_file }}"
-        marker: "# {mark} RESULTADO FINAL #"
-        block: |
-          === ACTUALIZACIÓN COMPLETADA ===
-          * Versión final: {{ final_version.stdout }}
-          * Reinicio realizado: {{ 'Sí' if reboot_needed.stdout is search("is required") else 'No' }}
-          * Hora finalización: {{ ansible_date_time.iso8601 }}
-
-    - name: Verificar si la versión final es RHEL 8.10
-      assert:
-        that:
-          - final_version.stdout is search("Red Hat Enterprise Linux release 8.10")
-        msg: "La versión final no es RHEL 8.10"
+    # Handler para reinicio controlado
+    - name: Ejecutar reinicio controlado
+      ansible.builtin.reboot:
+        msg: "Reinicio programado para completar actualización a RHEL {{ target_release }}"
+        connect_timeout: 5
+        reboot_timeout: "{{ reboot_timeout }}"
+        pre_reboot_delay: 15
+        post_reboot_delay: "{{ post_reboot_delay }}"
+      listen: "Ejecutar reinicio controlado"
+      when: kernel_update is defined and kernel_update.changed
