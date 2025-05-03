@@ -1,7 +1,7 @@
 ---
 - name: Actualizar RHEL 8.x a RHEL 8.10
   hosts: all
-  become: true  # Ejecutar como root automáticamente
+  become: true  # Ejecutar como root
 
   tasks:
     - name: Verificar la versión actual de RHEL
@@ -11,9 +11,9 @@
 
     - name: Mostrar la versión actual antes de actualizar
       debug:
-        msg: "La versión actual de RHEL es: {{ current_version.stdout }}"
+        msg: "Versión actual de RHEL: {{ current_version.stdout }}"
 
-    - name: Activar repositorios necesarios para la actualización
+    - name: Habilitar los repositorios necesarios para la actualización
       command: subscription-manager repos --enable=rhel-8-for-x86_64-baseos-rpms --enable=rhel-8-for-x86_64-appstream-rpms
       register: repo_status
       changed_when: "'enabled' in repo_status.stdout"
@@ -24,9 +24,10 @@
     - name: Actualizar metadatos de paquetes
       command: dnf makecache
 
-    - name: Actualizar todos los paquetes del sistema
+    - name: Actualizar el sistema a RHEL 8.10
       command: dnf update -y
 
-    - name: Forzar el reinicio del sistema sin confirmación
+    - name: Forzar el reinicio después de la actualización
       reboot:
         reboot_timeout: 600
+        test_command: "uptime"
