@@ -1,7 +1,7 @@
 ---
 - name: Actualizar RHEL 8.x a RHEL 8.10
   hosts: all
-  become: true  # Ejecutar como root
+  become: true  # Ejecutar como root automáticamente
 
   tasks:
     - name: Verificar la versión actual de RHEL
@@ -27,6 +27,6 @@
     - name: Actualizar todos los paquetes del sistema
       command: dnf update -y
 
-    - name: Reiniciar el sistema si la actualización lo requiere
+    - name: Forzar el reinicio del sistema sin confirmación
       reboot:
         reboot_timeout: 600
