@@ -1,0 +1,15 @@
+---
+- name: Eliminar servicios innecesarios
+  hosts: all
+  become: true
+  vars:
+    packages_to_remove:
+      - telnet
+      - rsh
+      - xinetd
+      - vsftpd
+  tasks:
+    - name: Remover paquetes inseguros
+      dnf:
+        name: "{{ packages_to_remove }}"
+        state: absent
