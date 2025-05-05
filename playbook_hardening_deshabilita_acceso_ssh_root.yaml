@@ -1,0 +1,16 @@
+---
+- name: Deshabilitar login SSH como root
+  hosts: all
+  become: true
+  tasks:
+    - name: Cambiar PermitRootLogin a no
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+        backup: yes
+
+    - name: Reiniciar el servicio SSH
+      systemd:
+        name: sshd
+        state: restarted
