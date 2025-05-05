@@ -8,6 +8,7 @@
       - rsh
       - xinetd
       - vsftpd
+      - ftp
   tasks:
     - name: Remover paquetes inseguros
       dnf:
