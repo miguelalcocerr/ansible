@@ -13,7 +13,7 @@
       debug:
         msg: "Versión actual: {{ current_version.stdout }}"
 
-    - name: Habilitar los repositorios necesarios para la actualización
+    #- name: Habilitar los repositorios necesarios para la actualización
      #command: subscription-manager repos --enable=rhel-8-for-x86_64-baseos-rpms --enable=rhel-8-for-x86_64-appstream-rpms
 
     - name: Limpiar y actualizar caché correctamente
